@@ -4,7 +4,6 @@ from os import environ
 from os.path import join
 from sys import argv, exit
 import numpy as np
-import scipy as sp
 import cv2
 
 from skimage.util import view_as_windows
@@ -25,25 +24,22 @@ def skimage_views_MSD_v2(img, tmpl):
     return np.einsum('ijkl,ijkl->ij', subs, subs) / float(tmpl.size)
 
 
-def get_x_r(coord_x_g, x_3):
-    # return coord_x_g + (x_1 - x_2 - x_3) // 2
-    return coord_x_g - x_3
 
+def get_x_r(coord_x_g, x_3):
+    #return coord_x_g + (x_1 - x_2 - x_3) // 2
+    return coord_x_g  - x_3
 
 def get_y_r(coord_y_g, y_3, v_frame, new_height):
-    # return coord_y_g + v_frame + new_height + (y_1 - y_2 - y_3) // 2
+    #return coord_y_g + v_frame + new_height + (y_1 - y_2 - y_3) // 2
     return coord_y_g + v_frame + new_height - y_3
 
-
 def get_x_b(coord_x_g, x_1):
-    # return coord_x_g + (x_1 + x_2 - x_3) // 2
+    #return coord_x_g + (x_1 + x_2 - x_3) // 2
     return coord_x_g + x_1
 
-
-def get_y_b(coord_y_g, y_1, v_frame, new_height):
-    # return coord_y_g - v_frame - new_height + (y_1 + y_2 - y_3) // 2
+def get_y_b(coord_y_g, y_1, v_frame, new_height) :
+    #return coord_y_g - v_frame - new_height + (y_1 + y_2 - y_3) // 2
     return coord_y_g - v_frame - new_height + y_1
-
 
 def get_maximum(a, b):
     if a > b:
@@ -57,22 +53,12 @@ def get_minimum(a, b):
     return b
 
 
-def get_max(a, b, c):
+def get_max(a,b,c):
     return get_maximum(a, get_maximum(b, c))
 
 
 def get_min(a, b, c):
     return get_minimum(a, get_minimum(b, c))
-
-
-def Pyramid(i):
-    # generate Gaussian pyramid
-    G = i.copy()
-    gp = [G]
-    while (G.shape[0] > 500 or G.shape[1] > 500):
-        G = cv2.pyrDown(G)
-        gp.append(G)
-    return gp
 
 
 def slice(i_1, i_2, i_3, x_1, x_3, y_1, y_3):
@@ -96,7 +82,7 @@ def slice(i_1, i_2, i_3, x_1, x_3, y_1, y_3):
         else:
             i_1 = i_1[:, x_1:]
             i_2 = i_2[:, : -x_1]
-            i_3 = i_3[:, : - x_1]
+            i_3 = i_3[:, : -x_1]
 
     elif x_1 < 0:
         if x_3 > 0:
@@ -118,6 +104,7 @@ def slice(i_1, i_2, i_3, x_1, x_3, y_1, y_3):
             i_1 = i_1[:, :  x_1]
             i_2 = i_2[:, -x_1:]
             i_3 = i_3[:, -x_1:]
+
     else:
         if x_3 > 0:
             i_1 = i_1[:, x_3:]
@@ -128,7 +115,6 @@ def slice(i_1, i_2, i_3, x_1, x_3, y_1, y_3):
             i_1 = i_1[:, : x_3]
             i_2 = i_2[:, : x_3]
             i_3 = i_3[:, - x_3:]
-
     if y_1 > 0:
 
         if y_3 > 0:
@@ -145,7 +131,6 @@ def slice(i_1, i_2, i_3, x_1, x_3, y_1, y_3):
                 i_1 = i_1[y_1:, :]
                 i_2 = i_2[: -y_1, :]
                 i_3 = i_3[-y_3: y_1 + y_3, :]
-
         if y_3 == 0:
             i_1 = i_1[y_1:, :]
             i_2 = i_2[: -y_1, :]
@@ -172,7 +157,6 @@ def slice(i_1, i_2, i_3, x_1, x_3, y_1, y_3):
             i_1 = i_1[: y_1, :]
             i_2 = i_2[-y_1:, :]
             i_3 = i_3[-y_1:, :]
-
     else:
         if y_3 > 0:
             i_1 = i_1[y_3:, :]
@@ -183,21 +167,45 @@ def slice(i_1, i_2, i_3, x_1, x_3, y_1, y_3):
             i_1 = i_1[: y_3, :]
             i_2 = i_2[: y_3, :]
             i_3 = i_3[-y_3:, :]
+    return i_1, i_2, i_3
 
+def Pyramid(i):
+    # generate Gaussian pyramid
+    G = i.copy()
+    gp = [G]
+    while (G.shape[0] > 200 or G.shape[1] > 200):
+        G = cv2.pyrDown(G)
+        gp.append(G)
+    return gp
 
 def MSE(i_1, i_2, min):
-    # break into parts of fixed size, check whether sum is > min * h * w
+    #break into parts of fixed size, check whether sum is > min * h * w
     if i_1.shape != i_2.shape:
         print(i_1.shape, i_2.shape)
         return -1
     h, w = i_1.shape
     curr = min * h * w
-    # sum = 0
-    # i_1_cp = i_1.copy()
-    # i_2_cp = i_2.copy()
-    sum = np.sum(np.power(np.subtract(i_1, i_2), 2))
-    # dif = np.power(dif, 2)
-    # sum += np.sum(dif)
+    s = w // 5  #  shift
+    st = 0
+    end = s
+    sum = 0
+    while end < w:
+        i_1_cp = i_1[st : end]
+        i_2_cp = i_2[st : end]
+        st += s
+        end += s
+        dif = np.subtract(i_1_cp, i_2_cp)
+        dif = np.power(dif, 2)
+        sum += np.sum(dif)
+        if (sum >= curr) :
+            return sum
+
+    i_1_cp = i_1.copy()[end :]
+    i_2_cp = i_2.copy()[end :]
+    dif = np.subtract(i_1_cp, i_2_cp)
+    dif = np.power(dif, 2)
+    sum += np.sum(dif)
+
     res = 1.0 / (h * w) * sum
     return res
 
@@ -223,45 +231,39 @@ def shift(i_1, i_2, level=0, x_s=0, y_s=0):
     max_y_shift = 0
     min = i_1.shape[0] * i_1.shape[1]
     max = 0;
-    # lim = 25 - 4 * level
-    # lim = 15 + 2 * level
-    lim = 20
+    lim = 22 - 3 * level
+    #lim = 18
     shifts = [0]
     for i in range(1, lim + 1):
         shifts.append(i)
         shifts.append(-i)
-    for x_shift in range(-lim, lim + 1):
+    for x_shift in range (-lim, lim + 1):
         x_shift += x_s
-        start = time.time()
-        for y_shift in range(-lim, lim + 1):
+        for y_shift in range (-lim, lim + 1):
             y_shift += y_s
             i_1_cp = i_1.copy()
             i_2_cp = i_2.copy()
             if x_shift > 0:
-                i_1_cp = i_1_cp[:, x_shift:]
-                i_2_cp = i_2_cp[:, : -x_shift]
+                i_1_cp = i_1_cp[: , x_shift : ]
+                i_2_cp = i_2_cp[: , : -x_shift]
             elif x_shift < 0:
-                i_1_cp = i_1_cp[:, : x_shift]
-                i_2_cp = i_2_cp[:, -x_shift:]
+                i_1_cp = i_1_cp[: , : x_shift]
+                i_2_cp = i_2_cp[: , -x_shift : ]
             if y_shift > 0:
-                i_1_cp = i_1_cp[y_shift:, :]
-                i_2_cp = i_2_cp[: -y_shift, :]
+                    i_1_cp = i_1_cp[y_shift : , :]
+                    i_2_cp = i_2_cp[: -y_shift, :]
             elif y_shift < 0:
-                i_1_cp = i_1_cp[: y_shift, :]
-                i_2_cp = i_2_cp[-y_shift:, :]
+                    i_1_cp = i_1_cp[: y_shift , :]
+                    i_2_cp = i_2_cp[-y_shift : , :]
 
-            # curr = MSE(i_1_cp, i_2_cp, min)
-            curr = skimage_views_MSD_v1(i_1_cp, i_2_cp)
-            # curr = mse(i_1_cp, i_2_cp)
+            #curr = MSE(i_1_cp, i_2_cp, min)
+            curr = skimage_views_MSD_v2(i_1_cp, i_2_cp)
             if curr < min:
                 min = curr
                 min_x_shift = x_shift
                 min_y_shift = y_shift
             '''
-            curr = sp.signal.correlate2d(i_1_cp, i_2_cp)
-            print(curr)
-            return 0, 0
-
+            curr = cross_correlation(i_1_cp, i_2_cp)
             if curr > max:
                 max = curr
                 max_x_shift = x_shift
@@ -269,13 +271,12 @@ def shift(i_1, i_2, level=0, x_s=0, y_s=0):
             if curr == -1:
                 print(x_shift, y_shift)
             '''
-        end = time.time()
-        # print("\tx_shift:", x_shift, "\t",  (end - start) / 60)
     return min_x_shift, min_y_shift
-    # return max_x_shift, max_y_shift
+    #return max_x_shift, max_y_shift
 
 
-def align(img, g_coord):
+
+def align(img, g_coord) :
     from numpy.lib import scimath
     from skimage.io import imread, imsave
     import time
@@ -289,9 +290,9 @@ def align(img, g_coord):
     new_height = int((height - 6 * v_frame) / 3)  # height of the image without frame
     h_frame = int(width * 0.06)
 
-    up = img[2 * v_frame: 2 * v_frame + new_height, h_frame: -h_frame];
-    mid = img[3 * v_frame + new_height: 3 * v_frame + 2 * new_height, h_frame: -h_frame];
-    down = img[4 * v_frame + 2 * new_height: height - 2 * v_frame, h_frame: -h_frame];
+    up = img[2 * v_frame : 2 * v_frame + new_height, h_frame : -h_frame];
+    mid = img[3 * v_frame + new_height : 3 * v_frame + 2 * new_height, h_frame : -h_frame];
+    down = img[4 * v_frame + 2 * new_height : height - 2 * v_frame, h_frame : -h_frame];
 
     h1, w1 = up.shape
     h2, w2 = mid.shape
@@ -318,6 +319,7 @@ def align(img, g_coord):
     x_1, x_2, x_3, y_1, y_2, y_3 = 0, 0, 0, 0, 0, 0
     pyramids = len(p1)
 
+    print("levels: ", pyramids)
     for i in range(pyramids - 1, -1, -1):
         lvl = pyramids - i - 1
         x_1, y_1 = shift(p1[i].copy(), p2[i].copy(), lvl, x_1, y_1)
@@ -328,17 +330,26 @@ def align(img, g_coord):
     coord_x_b = get_x_b(coord_x_g, x_1)
     coord_y_b = get_y_b(coord_y_g, y_1, v_frame, new_height)
 
+
     end = time.time()
     print("Shifting", (end - start) / 60)
-    # y_max = get_max(v_frame + new_height, v_frame + new_height - y_1, v_frame + new_height + y_2)
-    # y_min = get_min(3 * v_frame + 2 * new_height, 3 * v_frame + 2 * new_height - y_1, 3 * v_frame + 2 * new_height + y_2)
-    # x_max = get_max(0, -x_1, x_2)
-    # x_min = get_min(w, w - x_1, w + x_2)
-    # res = np.ndarray(shape=(y_min - y_max, x_min - x_max, 3), dtype=float)
-    # print(y_max, y_min, x_max, x_min)
+    #y_max = get_max(v_frame + new_height, v_frame + new_height - y_1, v_frame + new_height + y_2)
+    #y_min = get_min(3 * v_frame + 2 * new_height, 3 * v_frame + 2 * new_height - y_1, 3 * v_frame + 2 * new_height + y_2)
+    #x_max = get_max(0, -x_1, x_2)
+    #x_min = get_min(w, w - x_1, w + x_2)
+    #res = np.ndarray(shape=(y_min - y_max, x_min - x_max, 3), dtype=float)
+    #print(y_max, y_min, x_max, x_min)
+    '''
+    for i in range(y_max, y_min):
+        for j in range(x_max, x_min):
+            res[i - y_max][j - x_max][0] = img[get_y_r(i, y_3, v_frame, new_height)][get_x_r(j, x_3)]
+            res[i - y_max][j - x_max][1] = img[i][j]
+            res[i - y_max][j - x_max][2] = img[get_y_b(i, y_1, v_frame, new_height)][get_x_b(j, x_1)]
+    '''
     start = time.time()
 
-    slice(up, mid, down, x_1, x_3, y_1, y_3)
+    up, mid, down = slice(up, mid, down, x_1, x_3, y_1, y_3)
+
 
     end = time.time()
     print("Slicing", (end - start) / 60)
@@ -353,7 +364,7 @@ def align(img, g_coord):
 
 
 def run_single_test(data_dir, gt_dir):
-    # from align import align
+    #from align import align
     from skimage.io import imread, imsave
     parts = open(join(data_dir, 'g_coord.csv')).read().rstrip('\n').split(',')
     g_coord = (int(parts[0]), int(parts[1]))
@@ -367,13 +378,14 @@ def run_single_test(data_dir, gt_dir):
         gt_b_row, gt_b_col, _, _, gt_r_row, gt_r_col, diff_max = coords
 
     diff = abs(b_row - gt_b_row) + abs(b_col - gt_b_col) + \
-           abs(r_row - gt_r_row) + abs(r_col - gt_r_col)
+        abs(r_row - gt_r_row) + abs(r_col - gt_r_col)
 
     imsave("test.png", aligned_img)
     if diff > diff_max:
         print(diff)
         return 'Wrong answer'
     return 'Ok'
+
 
 
 import math
