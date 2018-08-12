@@ -19,46 +19,21 @@ def skimage_views_MSD_v1(img, tmpl):
     return ((view_as_windows(img, tmpl.shape) - tmpl) ** 2).mean(axis=(2, 3))
 
 
-def skimage_views_MSD_v2(img, tmpl):
-    subs = view_as_windows(img, tmpl.shape) - tmpl
-    return np.einsum('ijkl,ijkl->ij', subs, subs) / float(tmpl.size)
-
-
-
-def get_x_r(coord_x_g, x_3):
+def get_x_b(coord_x_g, x_3):
     #return coord_x_g + (x_1 - x_2 - x_3) // 2
     return coord_x_g  - x_3
 
-def get_y_r(coord_y_g, y_3, v_frame, new_height):
+def get_y_b(coord_y_g, y_3, v_frame, new_height):
     #return coord_y_g + v_frame + new_height + (y_1 - y_2 - y_3) // 2
     return coord_y_g + v_frame + new_height - y_3
 
-def get_x_b(coord_x_g, x_1):
+def get_x_r(coord_x_g, x_1):
     #return coord_x_g + (x_1 + x_2 - x_3) // 2
     return coord_x_g + x_1
 
-def get_y_b(coord_y_g, y_1, v_frame, new_height) :
+def get_y_r(coord_y_g, y_1, v_frame, new_height) :
     #return coord_y_g - v_frame - new_height + (y_1 + y_2 - y_3) // 2
     return coord_y_g - v_frame - new_height + y_1
-
-def get_maximum(a, b):
-    if a > b:
-        return a
-    return b
-
-
-def get_minimum(a, b):
-    if a < b:
-        return a
-    return b
-
-
-def get_max(a,b,c):
-    return get_maximum(a, get_maximum(b, c))
-
-
-def get_min(a, b, c):
-    return get_minimum(a, get_minimum(b, c))
 
 
 def slice(i_1, i_2, i_3, x_1, x_3, y_1, y_3):
@@ -231,15 +206,15 @@ def shift(i_1, i_2, level=0, x_s=0, y_s=0):
     max_y_shift = 0
     min = i_1.shape[0] * i_1.shape[1]
     max = 0;
-    lim = 22 - 3 * level
+    lim = 20 - 2 * level
     #lim = 18
     shifts = [0]
     for i in range(1, lim + 1):
         shifts.append(i)
         shifts.append(-i)
-    for x_shift in range (-lim, lim + 1):
+    for x_shift in shifts:
         x_shift += x_s
-        for y_shift in range (-lim, lim + 1):
+        for y_shift in shifts:
             y_shift += y_s
             i_1_cp = i_1.copy()
             i_2_cp = i_2.copy()
@@ -257,7 +232,7 @@ def shift(i_1, i_2, level=0, x_s=0, y_s=0):
                     i_2_cp = i_2_cp[-y_shift : , :]
 
             #curr = MSE(i_1_cp, i_2_cp, min)
-            curr = skimage_views_MSD_v2(i_1_cp, i_2_cp)
+            curr = skimage_views_MSD_v1(i_1_cp, i_2_cp)[0][0]
             if curr < min:
                 min = curr
                 min_x_shift = x_shift
@@ -270,7 +245,8 @@ def shift(i_1, i_2, level=0, x_s=0, y_s=0):
                 max_y_shift = y_shift
             if curr == -1:
                 print(x_shift, y_shift)
-            '''
+             '''
+    print(min_x_shift, min_y_shift, min)
     return min_x_shift, min_y_shift
     #return max_x_shift, max_y_shift
 
@@ -325,10 +301,10 @@ def align(img, g_coord) :
         x_1, y_1 = shift(p1[i].copy(), p2[i].copy(), lvl, x_1, y_1)
         x_3, y_3 = shift(p2[i].copy(), p3[i].copy(), lvl, x_3, y_3)
 
-    coord_x_r = get_x_r(coord_x_g, x_3)
-    coord_y_r = get_y_r(coord_y_g, y_3, v_frame, new_height)
-    coord_x_b = get_x_b(coord_x_g, x_1)
-    coord_y_b = get_y_b(coord_y_g, y_1, v_frame, new_height)
+    coord_x_r = get_x_r(coord_x_g, x_1)
+    coord_y_r = get_y_r(coord_y_g, y_1, v_frame, new_height)
+    coord_x_b = get_x_b(coord_x_g, x_3)
+    coord_y_b = get_y_b(coord_y_g, y_3, v_frame, new_height)
 
 
     end = time.time()
@@ -360,7 +336,7 @@ def align(img, g_coord) :
 
     end = time.time()
     print("Merging", (end - start) / 60)
-    return res, (coord_y_b, coord_x_b), (coord_y_r, coord_x_r)
+    return res, (coord_y_r, coord_x_r), (coord_y_b, coord_x_b)
 
 
 def run_single_test(data_dir, gt_dir):
@@ -377,15 +353,15 @@ def run_single_test(data_dir, gt_dir):
         coords = map(int, parts[1:])
         gt_b_row, gt_b_col, _, _, gt_r_row, gt_r_col, diff_max = coords
 
-    diff = abs(b_row - gt_b_row) + abs(b_col - gt_b_col) + \
-        abs(r_row - gt_r_row) + abs(r_col - gt_r_col)
+    x_diff = abs(b_row - gt_b_row) + abs(r_row - gt_r_row)
+
+    y_diff = abs(b_col - gt_b_col) + abs(r_col - gt_r_col)
 
     imsave("test.png", aligned_img)
-    if diff > diff_max:
-        print(diff)
+    if x_diff + y_diff > diff_max:
+        print(x_diff, y_diff)
         return 'Wrong answer'
     return 'Ok'
-
 
 
 import math
